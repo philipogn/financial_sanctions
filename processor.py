@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import sys
 
 class Processer:
     def __init__(self, csv_path):
@@ -14,10 +15,11 @@ class Processer:
 
     def clean_drop_cols(self, df):
         # Standardise column names
-        df.columns = (df.columns.
-                      str.replace(' ', '_').
-                      str.replace('-', '_').
-                      str.lower()
+        df.columns = (
+            df.columns.
+            str.replace(' ', '_').
+            str.replace('-', '_').
+            str.lower()
         )
         df = df.rename(columns={'d.o.b': 'date_of_birth', 'nationality(/ies)': 'nationality'})
         # Drop Entity and Ship designations
@@ -83,23 +85,29 @@ class Processer:
         )
         return df
 
+    def _combine_unique(self, values): # Helper function aggregate cols with multiple values
+        return '|'.join(sorted(set(v for v in values if pd.notna(v) and v)))
 
     def combine_ids(self, df):
-        primary_df = (df[(df['name_type'] == 'Primary Name') & 
-                         (df['full_name'].notna()) &
-                         (df['full_name'].str.strip() != '')]
-                         .drop_duplicates(subset=['unique_id'])
-                         .copy()
+        # Extract Primary Name where it exists per unique_id
+        primary_df = (
+            df[(df['name_type'] == 'Primary Name') & 
+               (df['full_name'].notna()) &
+               (df['full_name'] != '')]
+               .drop_duplicates(subset=['unique_id'])
+               .copy()
         )
-        # Extract only full_name for aliases and group by unique_id
+        
+        # Concat aliases and name variations into one field for each unique_id
         aliases_df = (
             df[(df['name_type'] == 'Alias') |
                (df['name_type'] == 'Primary Name Variation')]
             .groupby('unique_id')['full_name']
-            .apply(lambda x: '|'.join(sorted(set(x))))
+            .apply(lambda x: '|'.join(sorted(set(v for v in x if pd.notna(v) and v != ''))))
             .reset_index()
             .rename(columns={'full_name': 'aliases'})
         )
+        # Aggegate multiple possible values into one
         aggregated_df = df.groupby('unique_id').agg({
             'date_of_birth': self._combine_unique,
             'nationality': self._combine_unique,
@@ -112,17 +120,19 @@ class Processer:
             'position': self._combine_unique
         }).reset_index()
 
-        # Drop not aggregated original df columns
+        # Drop unaggregated original df columns
         aggregate_cols = [
             'date_of_birth', 'nationality', 'town_of_birth', 'passport_number',
             'national_identifier_number', 'address', 'address_country', 'position'
         ]
         primary_df = primary_df.drop(columns=aggregate_cols, errors='ignore')
 
+        # Merge aggregated columns
         final_df = (primary_df
                     .merge(aliases_df, on='unique_id', how='left')
                     .merge(aggregated_df, on='unique_id', how='left')
         )
+        # Select/reorder columns
         final_df = final_df.rename(columns={'full_name': 'primary_name'})
         final_df = final_df[
             ['unique_id','ofsi_group_id', 'primary_name', 'aliases',
@@ -132,12 +142,7 @@ class Processer:
             'regime_name','designation_source','date_designated','sanctions_imposed',
             'position','last_updated', ]
         ]
-        # final_df.to_csv('../data/final.csv', index=False)
         return final_df
-
-
-    def _combine_unique(self, values): # Helper function aggregate cols with multiple values
-        return '|'.join(sorted(set(v for v in values if pd.notna(v) and v)))
 
 
     def run(self):
@@ -151,5 +156,13 @@ class Processer:
 
 
 if __name__ == '__main__':
+    try:
+        file_path = sys.argv[1]
+    except IndexError:
+        print(f'Input a path to file')
+    except NameError:
+        print(f'Input a path to file')
+
+    clean = Processer(file_path)
     clean = Processer('data/UK-Sanctions-List.csv')
     clean.run()
