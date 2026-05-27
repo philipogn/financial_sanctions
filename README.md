@@ -12,6 +12,9 @@ run main
 - Very messy dataset, essentially a cartesian product of data for every ID
 
 - Filtered to only extract individuals from the UK sanction list, since we're dealing with customer information, 'Ship' and 'Entity' designations were ignored
+    - 3977 Individuals
+    - 1569 Entities
+    - 631 Ships
 
 - Several records contain multiple possible dates of birth, often with incomplete date components
 
