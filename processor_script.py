@@ -8,7 +8,7 @@ class Processer:
 
 
     def csv_loader(self, path):
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, skiprows=1)
         return df
 
 
@@ -20,6 +20,9 @@ class Processer:
                       str.lower()
         )
         df = df.rename(columns={'d.o.b': 'date_of_birth', 'nationality(/ies)': 'nationality'})
+        # Drop Entity and Ship designations
+        designation_drop = df[df['designation_type'].isin(['Entity', 'Ship'])].index
+        df = df.drop(designation_drop)
         # Drop unrelated/unecessary columns
         df = df.drop(
             columns=[
@@ -49,7 +52,7 @@ class Processer:
         for col in text_columns:
             df[col] = (
                 df[col]
-                .astype(str)
+                .astype('string')
                 .str.replace("\u2018", "'", regex=False) # open apostrophe
                 .str.replace("\u2019", "'", regex=False) # closed apostrophe
                 .str.replace("\u2013", "-", regex=False) # dash
@@ -61,12 +64,6 @@ class Processer:
         df['name_type'] = df['name_type'].str.title()
         df['gender'] = df['gender'].str.title()
         df['town_of_birth'] = df['town_of_birth'].str.title()
-        return df
-
-
-    def target_data(self, df):
-        designation_drop = df[df['Designation Type'].isin(['Entity', 'Ship'])].index
-        df.drop(designation_drop, inplace=True)
         return df
 
 
@@ -88,14 +85,16 @@ class Processer:
 
 
     def combine_ids(self, df):
-        primary_df = (
-            df[df['name_type'] == 'Primary Name']
-            .drop_duplicates(subset=['unique_id'])
-            .copy()
+        primary_df = (df[(df['name_type'] == 'Primary Name') & 
+                         (df['full_name'].notna()) &
+                         (df['full_name'].str.strip() != '')]
+                         .drop_duplicates(subset=['unique_id'])
+                         .copy()
         )
         # Extract only full_name for aliases and group by unique_id
         aliases_df = (
-            df[df['name_type'] == 'Alias']
+            df[(df['name_type'] == 'Alias') |
+               (df['name_type'] == 'Primary Name Variation')]
             .groupby('unique_id')['full_name']
             .apply(lambda x: '|'.join(sorted(set(x))))
             .reset_index()
@@ -113,7 +112,7 @@ class Processer:
             'position': self._combine_unique
         }).reset_index()
 
-        # Drop original not aggregated df columns
+        # Drop not aggregated original df columns
         aggregate_cols = [
             'date_of_birth', 'nationality', 'town_of_birth', 'passport_number',
             'national_identifier_number', 'address', 'address_country', 'position'
@@ -133,20 +132,22 @@ class Processer:
             'regime_name','designation_source','date_designated','sanctions_imposed',
             'position','last_updated', ]
         ]
-        final_df.to_csv('../data/final.csv', index=False)
+        # final_df.to_csv('../data/final.csv', index=False)
         return final_df
 
 
-    def _combine_unique(values): # Helper function aggregate cols with multiple values
+    def _combine_unique(self, values): # Helper function aggregate cols with multiple values
         return '|'.join(sorted(set(v for v in values if pd.notna(v) and v)))
 
 
     def run(self):
-        df = self.csv_loader
+        df = self.csv_loader(self.csv_path)
         df = self.clean_drop_cols(df)
         df_col_clean = self.column_standardise(df)
+        df_combined = self.combine_fields(df_col_clean)
+        df_final = self.combine_ids(df_combined)
 
-        # df.to_csv('clean_individuals.csv', index=False)
+        df_final.to_csv('individual_sanctions.csv', index=False)
 
 
 if __name__ == '__main__':
