@@ -54,18 +54,29 @@ python processor.py {path_to_dataset}
 - Aliases:
     - Multiple aliases/name variation under a Primary Name, concatenated into 'aliases' field for each unique_id and name.
 
-- Date of Birth
-    - Kept raw data but concatenated (for multiple) into one string 'date_of_birth' field.
-
 - Address Fields:
     - Kept raw and concatenated into one 'address' field.
 
+- Date of Birth
+    - Kept raw data but concatenated (for multiple) into one string 'date_of_birth' field.
+
+
+
+- Fields dropped:
+    - Information and non latin names
+        - 'name_non_latin_script', 'non_latin_script_type', 'non_latin_script_language  'alias_strength', 'uk_statement_of_reasons', 'un_reference_number', 'other_information', 'national_identifier_additional_information', 'passport_additional_information',
+    - Organisation details
+        - 'type_of_entity', 'subsidiaries', 'parent_company', 'business_registration_number_(s)',
+    - Ship details
+        - 'imo_number', 'current_owner/operator_(s)', 'previous_owner/operator_(s)', 'current_believed_flag_of_ship', 'previous_flags', 'type_of_ship', 'tonnage_of_ship', 'length_of_ship', 'year_built', 'hull_identification_number_(hin)'
+
+
 ## Formatting
 - Column Names:
-    - Standardised to lowercasing, replace whitespace and '-' as underscore
+    - Standardised to lowercasing, replace whitespace and '-' as underscore, renaming for clarity
 - Dates (last_updated, date_designated).
     - Converted columns 'last_updated' and 'date_designated' data type to datetime.
-- OFSI Group ID
+- OFSI Group ID field
     - Originally floats, converted to 'Int64' (which allows null values, could also leave as is).
 - Gender
     - Included ['Female','female','Male','male'], inconsistent casing standardised to capitalisation.
