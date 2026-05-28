@@ -1,13 +1,22 @@
 # How to run script to clean sanctions list data
 - Clone the repository and enter the directory
-- From the root of the directory, install the requirements (only require pandas and numpy)
+
+- Create and activate a virtual environment
+```sh
+    python -m venv sanctions_venv
+    sanctions_venv\Scripts\activate  # for Mac/Linux: source sanctions_venv/bin/activate
+```
+
+- Install the requirements (only require pandas and numpy)
 ```sh
 pip install -r requirements.txt
 ```
+
 - Run the processor file with path (e.g., python processor.py data/UK-Sanctions-List.csv)
 ```sh
 python processor.py {path_to_dataset}
 ```
+
 - It will then output into a CSV file 'individual_sanctions.csv'
 
 
