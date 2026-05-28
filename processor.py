@@ -107,12 +107,12 @@ class Processer:
         
         # Concat aliases and name variations into one field for each unique_id
         aliases_df = (
-            df[(df['name_type'] == 'Alias') |
+            df[(df['name_type'] == 'Alias') | 
                (df['name_type'] == 'Primary Name Variation')]
-            .groupby('unique_id')['full_name']
-            .apply(lambda x: '|'.join(sorted(set(v for v in x if pd.notna(v) and v != ''))))
-            .reset_index()
-            .rename(columns={'full_name': 'aliases'})
+               .groupby('unique_id')['full_name']
+               .apply(lambda x: '|'.join(sorted(set(v for v in x if pd.notna(v) and v != ''))))
+               .reset_index()
+               .rename(columns={'full_name': 'aliases'})
         )
         # Aggegate multiple possible values into one
         aggregated_df = df.groupby('unique_id').agg({
@@ -167,12 +167,6 @@ class Processer:
 
 
 if __name__ == '__main__':
-    # try:
-    #     file_path = sys.argv[1]
-    # except IndexError:
-    #     print(f'Input a path to file')
-    # except NameError:
-    #     print(f'Input a path to file')
     if len(sys.argv) < 2:
         print('Run in this format: python processor.py {path_to_csv}')
         sys.exit(1)
