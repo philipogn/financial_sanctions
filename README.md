@@ -3,8 +3,8 @@
 
 - Create and activate a virtual environment
 ```sh
-    python -m venv sanctions_venv
-    sanctions_venv\Scripts\activate  # for Mac/Linux: source sanctions_venv/bin/activate
+python -m venv sanctions_venv
+sanctions_venv\Scripts\activate  # for Mac/Linux: source sanctions_venv/bin/activate
 ```
 
 - Install the requirements (only require pandas and numpy)
@@ -17,7 +17,7 @@ pip install -r requirements.txt
 python processor.py {path_to_dataset}
 ```
 
-- It will then output into a CSV file 'individual_sanctions.csv'
+- It will then output into a CSV file 'individual_sanctions.csv' (output is already in the root directory 'individual_sanctions')
 
 
 # Data Quality Assessment
