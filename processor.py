@@ -5,12 +5,15 @@ import sys
 class Processer:
     def __init__(self, csv_path):
         self.csv_path = csv_path
-        # self.df = None
 
 
     def csv_loader(self, path):
-        df = pd.read_csv(path, skiprows=1)
-        return df
+        try:
+            df = pd.read_csv(path, skiprows=1)
+            return df
+        except FileNotFoundError:
+            print(f'File not found: {path}')
+            sys.exit(1)
 
 
     def clean_drop_cols(self, df):
@@ -28,8 +31,9 @@ class Processer:
         # Drop unrelated/unecessary columns
         df = df.drop(
             columns=[
-                'name_non_latin_script','non_latin_script_type','non_latin_script_language',
-                'other_information','passport_additional_information',
+                'name_non_latin_script','non_latin_script_type','non_latin_script_language', 'alias_strength',
+                'uk_statement_of_reasons', 'un_reference_number','other_information',
+                'national_identifier_additional_information', 'passport_additional_information',
                 # Organisation details
                 'type_of_entity','subsidiaries','parent_company','business_registration_number_(s)',
                 # Ship details
@@ -54,14 +58,17 @@ class Processer:
         for col in text_columns:
             df[col] = (
                 df[col]
-                .astype('string')
                 .str.replace("\u2018", "'", regex=False) # open apostrophe
                 .str.replace("\u2019", "'", regex=False) # closed apostrophe
                 .str.replace("\u2013", "-", regex=False) # dash
                 .str.replace(r'\s+', ' ', regex=True)
                 .str.strip()
             )
-        
+
+        # Remove whitespace and leading apostrophe
+        for col in ['phone_number', 'national_identifier_number']:
+            df[col] = df[col].str.lstrip("'").str.replace(r'\s+', '', regex=True)
+
         # Standardise casing
         df['name_type'] = df['name_type'].str.title()
         df['gender'] = df['gender'].str.title()
@@ -76,8 +83,8 @@ class Processer:
         # Combine into one field
         df['full_name'] = (
             df[name_cols]
-            .apply(lambda x: x.str.title())
             .apply(lambda row: ' '.join(x for x in row if pd.notna(x) and x), axis=1)
+            .str.title()
         )
         df['address'] = (
             df[address_col]
@@ -112,18 +119,22 @@ class Processer:
             'date_of_birth': self._combine_unique,
             'nationality': self._combine_unique,
             'town_of_birth': self._combine_unique,
+            'country_of_birth': self._combine_unique,
+            'phone_number': self._combine_unique,
+            'email_address': self._combine_unique,
             'passport_number': self._combine_unique,
             'national_identifier_number': self._combine_unique,
             'address': self._combine_unique,
+            'address_postal_code': self._combine_unique,
             'address_country': self._combine_unique,
-            # 'sanctions_imposed': self._combine_unique, # no uniques per id, remove
             'position': self._combine_unique
         }).reset_index()
 
         # Drop unaggregated original df columns
         aggregate_cols = [
-            'date_of_birth', 'nationality', 'town_of_birth', 'passport_number',
-            'national_identifier_number', 'address', 'address_country', 'position'
+            'date_of_birth', 'nationality', 'town_of_birth', 'country_of_birth',
+            'phone_number', 'email_address', 'passport_number', 'national_identifier_number', 
+            'address', 'address_postal_code', 'address_country', 'position'
         ]
         primary_df = primary_df.drop(columns=aggregate_cols, errors='ignore')
 
@@ -156,13 +167,15 @@ class Processer:
 
 
 if __name__ == '__main__':
-    try:
-        file_path = sys.argv[1]
-    except IndexError:
-        print(f'Input a path to file')
-    except NameError:
-        print(f'Input a path to file')
+    # try:
+    #     file_path = sys.argv[1]
+    # except IndexError:
+    #     print(f'Input a path to file')
+    # except NameError:
+    #     print(f'Input a path to file')
+    if len(sys.argv) < 2:
+        print('Run in this format: python processor.py {path_to_csv}')
+        sys.exit(1)
 
-    clean = Processer(file_path)
-    clean = Processer('data/UK-Sanctions-List.csv')
+    clean = Processer(sys.argv[1])
     clean.run()
