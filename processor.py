@@ -8,21 +8,15 @@ class SanctionsProcessor(ABC):
     designation_type = None
     output_path = None
     output_cols = []
+    aggregate_cols = []
+    extra_drop_cols = []
 
-
-    # Organisation details
-    # 'type_of_entity','subsidiaries','parent_company','business_registration_number_(s)',
-    # keep 'alias_strength' for strong alias
-    aggregate_cols = [
-            'date_of_birth', 'nationality', 'town_of_birth', 'country_of_birth',
-            'phone_number', 'email_address', 'passport_number', 'national_identifier_number', 
-            'address', 'address_postal_code', 'address_country', 'position'
-        ]
+    # keep 'alias_strength' for strong alias, will implement later to keep strong aliases
     drop_columns=[
         'name_non_latin_script','non_latin_script_type','non_latin_script_language', 
         'uk_statement_of_reasons', 'un_reference_number','other_information',
         'national_identifier_additional_information', 'passport_additional_information',
-        # Ship details
+        # Ship details (useless)
         'imo_number','current_owner/operator_(s)','previous_owner/operator_(s)',
         'current_believed_flag_of_ship','previous_flags','type_of_ship',
         'tonnage_of_ship','length_of_ship','year_built','hull_identification_number_(hin)'
@@ -33,7 +27,6 @@ class SanctionsProcessor(ABC):
     def __init__(self, csv_path):
         self.csv_path = csv_path
 
-
     def csv_loader(self, path):
         try:
             return pd.read_csv(path, skiprows=1, low_memory=False)
@@ -41,9 +34,8 @@ class SanctionsProcessor(ABC):
             print(f'File not found: {path}')
             sys.exit(1)
 
-
     def standardise_column_names(self, df):
-        # Standardise column names
+        ''' Standardise column names '''
         df.columns = (
             df.columns.
             str.replace(' ', '_').
@@ -53,22 +45,21 @@ class SanctionsProcessor(ABC):
         df = df.rename(columns={'d.o.b': 'date_of_birth', 'nationality(/ies)': 'nationality'})
         return df
 
-    def filter_designation(self):
-        # to filter to designation (individual, entity)
-        # and drop cols here?
+    def filter_designation(self, df):
+        ''' To filter to designation types (individual, entity) and drop uneeded columns '''
         df = df[df['designation_type'] == self.designation_type].copy()
-        df = df.drop(columns=self.drop_columns)
+        df = df.drop(columns=self.drop_columns + self.extra_drop_cols)
         return df.drop_duplicates()
 
-
     def column_standardise(self, df):
-        # Convert columns dtype to datetime
+        ''' 
+        Convert columns dtype to datetime, 
+        Int64 to allows null values,
+        Clean up whitespace and replace uncommon unicode '''
         df['last_updated'] = pd.to_datetime(df['last_updated'], dayfirst=True)
         df['date_designated'] = pd.to_datetime(df['date_designated'], dayfirst=True)
-        # dtype to Int64 (allows null values, could leave as float)
         df['ofsi_group_id'] = df['ofsi_group_id'].astype('Int64')
 
-        # Clean up whitespace and replace uncommon unicode
         text_columns = df.select_dtypes(include='string').columns
         for col in text_columns:
             df[col] = (
@@ -79,23 +70,19 @@ class SanctionsProcessor(ABC):
                 .str.replace(r'\s+', ' ', regex=True)
                 .str.strip()
             )
-
         # Standardise casing
         df['name_type'] = df['name_type'].str.title()
         return df
 
-
     def _join_cols(self, df, cols): # helper function to join values across columns
         return df[cols].apply(lambda row: ' '.join(x for x in row if pd.notna(x) and x), axis=1)
 
-    def combine_fields(self, df):
-        # name_1: first name, name_2-5: other/middle names, name_6: surname
-        df['full_name'] = self._join_cols(self.name_cols).str.title()
-        df['address'] = self._join_cols(self.address_cols)
-        return df
-
     def _combine_unique(self, values): # Helper function aggregate cols with multiple values
         return '|'.join(sorted(set(v for v in values if pd.notna(v) and v)))
+
+    @abstractmethod
+    def combine_fields(self, df):
+        ''' Builds full_name and address columns '''
 
     def combine_ids(self, df):
         # Extract Primary Name where it exists per unique_id
@@ -117,7 +104,11 @@ class SanctionsProcessor(ABC):
                .rename(columns={'full_name': 'aliases'})
         )
         # Aggegate multiple possible values into one
-        aggregated_df = df.groupby('unique_id').agg({col: self._combine_unique for col in self.aggregate_cols}).reset_index()
+        aggregated_df = (
+            df.groupby('unique_id')
+            .agg({col: self._combine_unique for col in self.aggregate_cols})
+            .reset_index()
+        )
 
         # Drop unaggregated original df columns then merge aggregated columns
         primary_df = primary_df.drop(columns=self.aggregate_cols, errors='ignore')
@@ -127,19 +118,10 @@ class SanctionsProcessor(ABC):
         )
 
         final_df = final_df.rename(columns={'full_name': 'primary_name'})
-        # final_df = final_df[
-        #     ['unique_id','ofsi_group_id', 'primary_name', 'aliases',
-        #     'date_of_birth','nationality','gender','town_of_birth','country_of_birth',
-        #     'phone_number','email_address', 'national_identifier_number','passport_number',
-        #     'address','address_postal_code','address_country',
-        #     'regime_name','designation_source','date_designated','sanctions_imposed',
-        #     'position','last_updated', ]
-        # ]
         return final_df[self.output_cols]
 
     def save_csv(self, df):
         df.to_csv(self.output_path, index=False)
-
 
     def run(self):
         df = self.csv_loader(self.csv_path)
@@ -156,19 +138,22 @@ class SanctionsProcessor(ABC):
 class IndividualProcessor(SanctionsProcessor):
     designation_type = 'Individual'
     output_path = 'individual_sanctions.csv'
-    output_cols = [
-        'unique_id','ofsi_group_id', 'primary_name', 'aliases',
-        'date_of_birth','nationality','gender','town_of_birth','country_of_birth',
-        'phone_number','email_address', 'national_identifier_number','passport_number',
-        'address','address_postal_code','address_country',
-        'regime_name','designation_source','date_designated','sanctions_imposed',
-        'position','last_updated'
+    extra_drop_cols = [
+        'type_of_entity', 'subsidiaries', 'parent_company', 'business_registration_number_(s)'
     ]
-
-    # implement this here
-    # # Remove whitespace and leading apostrophe
-    # for col in ['phone_number', 'national_identifier_number']:
-    #     df[col] = df[col].str.lstrip("'").str.replace(r'\s+', '', regex=True)
+    aggregate_cols = [
+        'date_of_birth', 'nationality', 'town_of_birth', 'country_of_birth',
+        'phone_number', 'email_address', 'passport_number', 'national_identifier_number', 
+        'address', 'address_postal_code', 'address_country', 'position'
+    ]
+    output_cols = [
+        'unique_id', 'ofsi_group_id', 'primary_name', 'aliases',
+        'date_of_birth', 'nationality','gender','town_of_birth', 'country_of_birth',
+        'phone_number', 'email_address', 'national_identifier_number', 'passport_number',
+        'address', 'address_postal_code', 'address_country',
+        'regime_name', 'designation_source', 'date_designated', 'sanctions_imposed',
+        'position', 'last_updated'
+    ]
 
     def column_standardise(self, df):
         df = super().column_standardise(df)
@@ -178,29 +163,43 @@ class IndividualProcessor(SanctionsProcessor):
 
         df['gender'] = df['gender'].str.title()
         df['town_of_birth'] = df['town_of_birth'].str.title()
+        return df
 
+    def combine_fields(self, df):
+        # name_1: first name, name_2-5: other/middle names, name_6: surname
+        df['full_name'] = self._join_cols(df, self.name_cols).str.title()
+        df['address'] = self._join_cols(df, self.address_cols)
+        return df
 
 # ====================== ENTITY CLASS =========================
 class EntityProcessor(SanctionsProcessor):
     designation_type = 'Entity'
     output_path = 'entity_sanctions.csv'
+    aggregate_cols = [
+        'phone_number', 'email_address', 'website',
+        'address', 'address_postal_code', 'address_country',
+        'type_of_entity', 'subsidiaries', 'parent_company', 'business_registration_number_(s)'
+    ]
     output_cols = [
+        'unique_id', 'ofsi_group_id', 'primary_name', 'aliases',
         'type_of_entity', 'parent_company', 'subsidiaries', 'business_registration_number_(s)',
-        # CHECK WHATS NEEDED AND NOT
-        'unique_id','ofsi_group_id', 'primary_name', 'aliases',
-        'date_of_birth','nationality','gender','town_of_birth','country_of_birth',
-        'phone_number','email_address', 'national_identifier_number','passport_number',
-        'address','address_postal_code','address_country',
-        'regime_name','designation_source','date_designated','sanctions_imposed',
-        'position','last_updated'
+        'phone_number', 'email_address', 'website',
+        'address', 'address_postal_code', 'address_country',
+        'regime_name', 'designation_source', 'date_designated', 'sanctions_imposed',
+        'position', 'last_updated'
     ]
 
-
+    def combine_fields(self, df):
+        # entity names sit in name_6 (name_1-5 almost always empty), no title-casing, as names are often acronyms
+        df['full_name'] = self._join_cols(df, self.name_cols)
+        df['address'] = self._join_cols(df, self.address_cols)
+        return df
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print('Run in this format: python processor.py {path_to_csv}')
         sys.exit(1)
 
-    # clean = Processer(sys.argv[1])
-    # clean.run()
+    # loader = IndividualProcessor(sys.argv[1])
+    for processor in (IndividualProcessor, EntityProcessor):
+        processor(sys.argv[1]).run()
