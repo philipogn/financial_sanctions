@@ -1,16 +1,30 @@
 import pandas as pd
-import numpy as np
 import sys
+from abc import ABC, abstractmethod
 
-class Processer:
+# ===================== PARENT CLASS ======================
+class SanctionsProcessor(ABC):
+    # Organisation details
+    # 'type_of_entity','subsidiaries','parent_company','business_registration_number_(s)',
+    # keep 'alias_strength' for strong alias
+    ...
+    drop_columns=[
+        'name_non_latin_script','non_latin_script_type','non_latin_script_language', 
+        'uk_statement_of_reasons', 'un_reference_number','other_information',
+        'national_identifier_additional_information', 'passport_additional_information',
+        # Ship details
+        'imo_number','current_owner/operator_(s)','previous_owner/operator_(s)',
+        'current_believed_flag_of_ship','previous_flags','type_of_ship',
+        'tonnage_of_ship','length_of_ship','year_built','hull_identification_number_(hin)'
+    ]
+
     def __init__(self, csv_path):
         self.csv_path = csv_path
 
 
     def csv_loader(self, path):
         try:
-            df = pd.read_csv(path, skiprows=1)
-            return df
+            return pd.read_csv(path, skiprows=1, low_memory=False)
         except FileNotFoundError:
             print(f'File not found: {path}')
             sys.exit(1)
@@ -25,25 +39,12 @@ class Processer:
             str.lower()
         )
         df = df.rename(columns={'d.o.b': 'date_of_birth', 'nationality(/ies)': 'nationality'})
-        # Drop Entity and Ship designations
-        designation_drop = df[df['designation_type'].isin(['Entity', 'Ship'])].index
-        df = df.drop(designation_drop)
-        # Drop unrelated/unecessary columns
-        df = df.drop(
-            columns=[
-                'name_non_latin_script','non_latin_script_type','non_latin_script_language', 'alias_strength',
-                'uk_statement_of_reasons', 'un_reference_number','other_information',
-                'national_identifier_additional_information', 'passport_additional_information',
-                # Organisation details
-                'type_of_entity','subsidiaries','parent_company','business_registration_number_(s)',
-                # Ship details
-                'imo_number','current_owner/operator_(s)','previous_owner/operator_(s)',
-                'current_believed_flag_of_ship','previous_flags','type_of_ship',
-                'tonnage_of_ship','length_of_ship','year_built','hull_identification_number_(hin)'
-            ]
-        )
-        df = df.drop_duplicates()
         return df
+
+    def filter_designation():
+        # to filter to designation (individual, entity)
+        # and drop cols here?
+        ...
 
 
     def column_standardise(self, df):
@@ -165,11 +166,24 @@ class Processer:
 
         df_final.to_csv('individual_sanctions.csv', index=False)
 
+    def save_csv(self, df):
+        # df.to_csv(path, index=False)
+        pass
+
+# ===================== INDIVIDUAL CLASS ===================
+class IndividualProcessor(SanctionsProcessor):
+    ...
+
+# ====================== ENTITY CLASS =========================
+class EntityProcessor(SanctionsProcessor):
+    ...
+
+
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print('Run in this format: python processor.py {path_to_csv}')
         sys.exit(1)
 
-    clean = Processer(sys.argv[1])
-    clean.run()
+    # clean = Processer(sys.argv[1])
+    # clean.run()
